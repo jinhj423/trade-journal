@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#000000">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://api.github.com 'self'; img-src 'self' data:; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<title>매매일지</title>
+<!-- 홈 화면 설치(앱처럼 쓰기) -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="매매일지">
+<!--
+  공개 저장소에 두는 "입구" 파일. 이 파일은 앞으로 바꿀 일이 없어요.
+  실제 화면(app/index.html)은 비공개 데이터 저장소에 있고, 토큰으로 불러와서 띄워요.
+  그래서 업데이트는 비공개 저장소에 패치만 올리면 끝납니다.
+-->
+<style>
+  html,body{margin:0;background:#000;color:#f3f0f7}
+  body{font:15px/1.6 -apple-system,"Apple SD Gothic Neo","Malgun Gothic","IBM Plex Sans KR",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  main{max-width:460px;margin:0 auto;padding:64px 20px}
+  h1{font-size:22px;margin:0 0 6px;display:flex;align-items:center;gap:10px}
+  h1 i{display:block;width:12px;height:12px;border-radius:50% 50% 45% 55%/60% 55% 45% 40%;background:#c8a9f5}
+  p{color:#a49eae;margin:0 0 22px;font-size:14px}
+  ol{color:#a49eae;font-size:14px;padding-left:20px;margin:0 0 22px}
+  ol b{color:#f3f0f7;font-weight:600} a{color:#c8a9f5}
+  label{display:block;font-size:13px;color:#a49eae;margin:0 0 6px}
+  input{font:inherit;font-size:16px;color:#f3f0f7;background:#000;border:1px solid #35303c;border-radius:8px;padding:10px 12px;width:100%;box-sizing:border-box;margin-bottom:14px}
+  input:focus{outline:none;border-color:#c8a9f5}
+  button{font:inherit;font-weight:600;background:#c8a9f5;color:#000;border:0;border-radius:8px;padding:11px 18px;cursor:pointer;width:100%}
+  button:disabled{opacity:.5}
+  .err{color:#ff5d6c;font-size:13px;min-height:1.6em;margin-top:12px}
+  .wait{color:#6b6575;padding:80px 20px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wait" id="wait">불러오는 중</div>
+<main id="form" hidden>
+  <h1><i></i>매매일지</h1>
+  <p>내 비공개 데이터 저장소에 연결하면 매매일지가 열려요. 토큰은 이 브라우저에만 저장돼요.</p>
+  <ol>
+    <li><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer">GitHub 토큰 만들기</a>를 열어요.</li>
+    <li><b>Only select repositories</b>로 데이터 저장소 하나만 고르고, <b>Actions · Contents · Secrets</b>를 <b>Read and write</b>로 바꿔요.</li>
+    <li>만든 토큰과 아이디를 아래에 넣어요.</li>
+  </ol>
+  <label for="o">GitHub 아이디</label><input id="o" autocomplete="off" spellcheck="false">
+  <label for="r">데이터 저장소</label><input id="r" autocomplete="off" spellcheck="false" value="trade-journal-data">
+  <label for="t">토큰</label><input id="t" type="password" placeholder="github_pat_" autocomplete="off" spellcheck="false">
+  <button id="go">열기</button>
+  <div class="err" id="err" role="alert"></div>
+</main>
+<script>
+(function(){
+  "use strict";
+  // 앱 설치: 서비스워커 등록, 안드로이드·PC 크롬의 설치 신호는 화면(app)이 쓸 수 있게 보관
+  if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(function(){}); }
+  window.addEventListener("beforeinstallprompt", function(e){ e.preventDefault(); window.__tjInstall = e; });
+  var KEY = "tj.cfg.v1";
+  function load(){ try{ return JSON.parse(localStorage.getItem(KEY)) || {}; }catch(e){ return {}; } }
+  function save(c){ try{ localStorage.setItem(KEY, JSON.stringify(c)); }catch(e){} }
+  var el = function(id){ return document.getElementById(id); };
+
+  function showForm(msg){
+    var c = load();
+    el("wait").hidden = true; el("form").hidden = false;
+    if(c.owner) el("o").value = c.owner;
+    if(c.repo) el("r").value = c.repo;
+    el("err").textContent = msg || "";
+  }
+
+  function boot(){
+    var c = load();
+    if(!c.owner || !c.repo || !c.token){ showForm(); return; }
+    var url = "https://api.github.com/repos/" + encodeURIComponent(c.owner) + "/" + encodeURIComponent(c.repo) +
+              "/contents/app/index.html?ref=" + encodeURIComponent(c.branch || "main");
+    fetch(url, { cache: "no-store", headers: {
+      "Authorization": "Bearer " + c.token, "Accept": "application/vnd.github.raw+json", "X-GitHub-Api-Version": "2022-11-28" } })
+    .then(function(r){
+      if(r.status === 401) throw new Error("토큰이 만료됐거나 잘못됐어요. 새 토큰을 넣어주세요.");
+      if(r.status === 404) throw new Error("저장소나 app/index.html을 찾지 못했어요. 아이디·저장소 이름과 토큰의 저장소 선택을 확인하세요.");
+      if(!r.ok) throw new Error("불러오지 못했어요 (HTTP " + r.status + ")");
+      return r.text();
+    })
+    .then(function(html){ document.open(); document.write(html); document.close(); })
+    .catch(function(e){
+      showForm(navigator.onLine === false ? "인터넷에 연결되어 있지 않아요. 연결되면 다시 열어주세요." : e.message);
+    });
+  }
+
+  el("go").onclick = function(){
+    var c = load();
+    c.owner = el("o").value.trim(); c.repo = el("r").value.trim(); c.token = el("t").value.trim();
+    if(!c.owner || !c.repo || !c.token){ el("err").textContent = "세 칸을 모두 채워주세요."; return; }
+    save(c); el("form").hidden = true; el("wait").hidden = false; boot();
+  };
+  boot();
+})();
+</script>
+</body>
+</html>
