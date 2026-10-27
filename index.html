@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#000000">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://api.github.com 'self'; img-src 'self' data:; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://api.github.com https://raw.githubusercontent.com 'self'; img-src 'self' data:; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <title>매매일지</title>
 <!-- 홈 화면 설치(앱처럼 쓰기) -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -74,6 +74,19 @@
     el("err").textContent = msg || "";
   }
 
+  function write(html){ document.open(); document.write(html); document.close(); }
+
+  // 보기 전용 링크(?view=아이디/저장소): 토큰 없이 공개 저장소의 화면을 띄움
+  var view = new URLSearchParams(location.search).get("view");
+  if(view && /^[\w.-]+\/[\w.-]+$/.test(view)){
+    window.__TJ_VIEW = view;
+    fetch("https://raw.githubusercontent.com/" + view + "/main/app/index.html?t=" + Date.now(), { cache: "no-store" })
+      .then(function(r){ if(!r.ok) throw new Error(r.status === 404 ? "이 매매일지는 지금 공개되어 있지 않아요." : "불러오지 못했어요 (HTTP " + r.status + ")"); return r.text(); })
+      .then(write)
+      .catch(function(e){ el("wait").textContent = navigator.onLine === false ? "인터넷에 연결되어 있지 않아요." : e.message; });
+    return;
+  }
+
   function boot(){
     var c = load();
     if(!c.owner || !c.repo || !c.token){ showForm(); return; }
@@ -87,7 +100,7 @@
       if(!r.ok) throw new Error("불러오지 못했어요 (HTTP " + r.status + ")");
       return r.text();
     })
-    .then(function(html){ document.open(); document.write(html); document.close(); })
+    .then(write)
     .catch(function(e){
       showForm(navigator.onLine === false ? "인터넷에 연결되어 있지 않아요. 연결되면 다시 열어주세요." : e.message);
     });
